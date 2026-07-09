@@ -1,5 +1,8 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+## Contexto del proyecto
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+Esta app es para llevar las cuentas de un carro de Uber que usan mis papás,
+quienes no tienen experiencia con tecnología. Prioridades:
+
+- UI muy simple, botones grandes, texto claro (esto se hace al final)
+- Módulos: ingresos, gastos, lista de deseos (cosas que quieren comprar), exportar a Excel
+- Stack: Next.js App Router + TypeScript + Prisma + PostgreSQL (Docker en local)
