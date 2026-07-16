@@ -53,14 +53,13 @@ npx prisma db seed
 npm run dev
 ```
 
-### Usuarios de prueba (seed)
+### Usuario de prueba
 
 | Email | Contraseña |
 |-------|-----------|
-| uber@cuentas.com | uber123 |
-| angeles@cuentas.com | angeles123 |
-| ethel@cuentas.com | ethel123 |
-| renan@cuentas.com | renan123 |
+| demo@test.com | demo123 |
+
+> Demo: 108 transacciones de ejemplo y 6 artículos en lista de deseos.
 
 ## Deploy
 
