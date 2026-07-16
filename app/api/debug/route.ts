@@ -1,16 +1,12 @@
+import { prisma } from "@/lib/prisma"
+
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const vars = [
-    "DATABASE_URL",
-    "POSTGRES_PRISMA_URL",
-    "POSTGRES_URL",
-    "POSTGRES_HOST",
-    "POSTGRES_PORT",
-  ]
-  const result: Record<string, string> = {}
-  for (const v of vars) {
-    result[v] = process.env[v] ? "SET (length=" + process.env[v]!.length + ", starts=" + process.env[v]!.slice(0, 20) + "...)" : "NOT SET"
+  try {
+    const result = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*)::int as count FROM "User"`
+    return Response.json({ users: result[0] })
+  } catch (e) {
+    return Response.json({ error: String(e) }, { status: 500 })
   }
-  return Response.json(result)
 }
