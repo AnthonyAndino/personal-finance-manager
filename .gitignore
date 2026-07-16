@@ -36,7 +36,6 @@ yarn-error.log*
 .env.production
 
 # local config files
-AGENTS.md
 opencode.json
 
 # vercel
