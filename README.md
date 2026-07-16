@@ -1,36 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Personal Finance Manager
 
-## Getting Started
+Aplicación web para llevar el control de ingresos y gastos personales. Diseñada para personas sin experiencia con tecnología: interfaz simple, botones grandes, texto claro.
 
-First, run the development server:
+## Funcionalidades
+
+- **Dashboard** — resumen del mes actual: ingresos, gastos, saldo neto
+- **Ingresos/Gastos** — registrar transacciones por tipo, categoría, monto y fecha
+- **Historial** — tabla interactiva con búsqueda, ordenamiento y paginación
+- **Gráficos** — distribución de gastos por categoría y evolución mensual
+- **Lista de deseos** — productos que quieres comprar, con link y prioridad
+- **Exportar a Excel** — descarga todas las transacciones en formato XLSX
+- **Papelera** — recuperar o eliminar permanentemente transacciones borradas
+
+## Stack
+
+- **Framework**: [Next.js](https://nextjs.org) 16 + App Router + Turbopack
+- **Base de datos**: PostgreSQL via [Prisma](https://prisma.io) ORM
+- **Autenticación**: [Auth.js](https://authjs.dev) v5 (credentials, bcrypt, JWT)
+- **Estilos**: Tailwind CSS 4
+- **Íconos**: [reicon-react](https://www.npmjs.com/package/reicon-react)
+- **Tabla interactiva**: [@tanstack/react-table](https://tanstack.com/table)
+- **Date picker**: [react-datepicker](https://reactdatepicker.com)
+- **Gráficos**: [recharts](https://recharts.org)
+
+## Requisitos
+
+- Node.js 20+
+- Docker Desktop (para desarrollo local)
+- Cuenta en [Supabase](https://supabase.com) (para producción)
+
+## Desarrollo local
 
 ```bash
+# 1. Clonar
+git clone https://github.com/tu-usuario/personal-finance-manager.git
+cd personal-finance-manager
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Levantar PostgreSQL con Docker
+docker compose up -d
+
+# 4. Copiar y configurar variables de entorno
+cp .env.example .env
+
+# 5. Correr migraciones y seed
+npx prisma migrate deploy
+npx prisma db seed
+
+# 6. Iniciar servidor de desarrollo
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Usuarios de prueba (seed)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Email | Contraseña |
+|-------|-----------|
+| uber@cuentas.com | uber123 |
+| angeles@cuentas.com | angeles123 |
+| ethel@cuentas.com | ethel123 |
+| renan@cuentas.com | renan123 |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deploy
 
-## Learn More
+```bash
+# Construir para producción
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Vercel + Supabase
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Crea un proyecto en [Vercel](https://vercel.com) conectando el repositorio
+2. Crea un proyecto en [Supabase](https://supabase.com)
+3. En Vercel, agrega estas variables de entorno:
+   - `DATABASE_URL` — connection string de Supabase
+   - `AUTH_SECRET` — generado con `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+4. Corre migraciones contra la DB de producción:
+   ```bash
+   npx prisma migrate deploy
+   npx prisma db seed
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Seguridad
 
-## Deploy on Vercel
+- Autenticación con bcrypt + JWT
+- Rate limiting en login (5 intentos/15min) y exportación (30/min)
+- CSP, X-Frame-Options, X-Content-Type-Options
+- Soft delete: las transacciones se marcan como eliminadas, no se borran
+- Sin secreto en el código fuente
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Licencia
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
