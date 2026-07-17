@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma"
 import { WISHLIST_PURCHASE_CATEGORY } from "@/lib/transaction-categories"
-import { amountToLempiras, getDefaultRate } from "@/lib/currency"
+import { amountToLempiras } from "@/lib/currency"
+import { getDefaultRate } from "@/lib/exchange-rate"
 
 export type WishlistItemTx = {
   type: string

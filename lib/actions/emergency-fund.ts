@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { getAvailableBalance as calcAvailableBalance } from "@/lib/balance"
-import { amountToLempiras, getDefaultRate } from "@/lib/currency"
+import { amountToLempiras } from "@/lib/currency"
+import { getDefaultRate } from "@/lib/exchange-rate"
 
 export async function getEmergencyFundBalance() {
   const session = await auth()

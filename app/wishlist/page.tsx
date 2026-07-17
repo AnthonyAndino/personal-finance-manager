@@ -4,7 +4,7 @@ import { WishlistForm } from "@/components/wishlist-form"
 import { WishlistList } from "@/components/wishlist-list"
 import { EmergencyFundWishlistCard } from "@/components/emergency-fund-card"
 import { Sidebar } from "@/components/sidebar"
-import { getDefaultRate } from "@/lib/currency"
+import { getDefaultRate } from "@/lib/exchange-rate"
 
 export default async function WishlistPage() {
   const session = await auth()

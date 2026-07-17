@@ -54,3 +54,9 @@ model RateLimitEntry {
   count   Int
   resetAt DateTime
 }
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

@@ -1,21 +1,5 @@
-/** Valor de respaldo si la API no responde */
+/** Solo si nunca se obtuvo una tasa de la API ni hay una guardada */
 export const FALLBACK_EXCHANGE_RATE = 26.75
-
-/** Obtiene la tasa USD → Lempiras desde open.er-api.com (se actualiza automáticamente) */
-export async function getDefaultRate(): Promise<number> {
-  try {
-    const res = await fetch("https://open.er-api.com/v6/latest/USD", {
-      next: { revalidate: 3600 },
-    })
-    const data = await res.json()
-    if (typeof data.rates?.HNL === "number" && data.rates.HNL > 0) {
-      return data.rates.HNL
-    }
-  } catch {
-    // API no disponible — usar respaldo
-  }
-  return FALLBACK_EXCHANGE_RATE
-}
 
 /** Convierte un monto individual a lempiras (sin redondear) */
 export function amountToLempiras(amount: number, currency: string, rate: number): number {

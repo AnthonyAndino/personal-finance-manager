@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { TransactionForm } from "@/components/transaction-form"
 import { RecentTransactions } from "@/components/recent-transactions"
 import { Sidebar } from "@/components/sidebar"
-import { getDefaultRate } from "@/lib/currency"
+import { getDefaultRate } from "@/lib/exchange-rate"
 
 export default async function TransactionsPage() {
   const session = await auth()
