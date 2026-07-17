@@ -3,6 +3,7 @@
 import { useActionState, useState, useEffect, useRef } from "react"
 import { createTransaction } from "@/lib/actions/transactions"
 import { listUnpurchasedWishlistItems } from "@/lib/actions/wishlist"
+import { WISHLIST_PURCHASE_CATEGORY } from "@/lib/transaction-categories"
 import DatePicker from "react-datepicker"
 import "react-datepicker/dist/react-datepicker.css"
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from "reicon-react"
@@ -96,6 +97,8 @@ export function TransactionForm({ defaultRate = 25 }: { defaultRate?: number }) 
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedWishlist, setSelectedWishlist] = useState("")
+  const [amount, setAmount] = useState("")
+  const [category, setCategory] = useState("")
 
   useEffect(() => {
     if (state?.success) {
@@ -104,8 +107,25 @@ export function TransactionForm({ defaultRate = 25 }: { defaultRate?: number }) 
   }, [state?.success])
 
   useEffect(() => {
-    listUnpurchasedWishlistItems().then(setWishlistItems)
-  }, [])
+    if (type === "expense") {
+      listUnpurchasedWishlistItems().then(setWishlistItems)
+    } else {
+      setSelectedWishlist("")
+    }
+  }, [type])
+
+  const handleWishlistSelect = (wishlistId: string) => {
+    setSelectedWishlist(wishlistId)
+    if (!wishlistId) return
+
+    const item = wishlistItems.find((i) => i.id === wishlistId)
+    if (!item) return
+
+    if (item.estimatedPrice) {
+      setAmount(item.estimatedPrice.toString())
+    }
+    setCategory(WISHLIST_PURCHASE_CATEGORY)
+  }
 
   return (
     <form
@@ -200,6 +220,8 @@ export function TransactionForm({ defaultRate = 25 }: { defaultRate?: number }) 
             step="0.01"
             min="0.01"
             required
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00"
             className="w-full bg-white text-slate-900 placeholder-slate-400 rounded-xl border border-slate-200 py-3.5 pl-8 pr-4 text-base font-extrabold outline-none transition-all duration-200 focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10"
           />
@@ -213,6 +235,8 @@ export function TransactionForm({ defaultRate = 25 }: { defaultRate?: number }) 
           name="category"
           type="text"
           required
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
           placeholder="Ej. Gasolina, Lavado, Comida"
           className="bg-white text-slate-900 placeholder-slate-400 rounded-xl border border-slate-200 py-3.5 px-4 text-sm outline-none transition-all duration-200 focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10"
         />
@@ -246,27 +270,38 @@ export function TransactionForm({ defaultRate = 25 }: { defaultRate?: number }) 
         </div>
       )}
 
-      {/* Vincular a deseo (solo gastos) */}
-      {type === "expense" && wishlistItems.length > 0 && (
+      {/* Vincular a deseo (solo gastos — cuenta como compra real) */}
+      {type === "expense" && (
         <div className="flex flex-col gap-2">
           <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-            Vincular a deseo
+            Vincular a deseo (compra)
           </label>
-          <div className="relative">
-            <CustomSelect
-              value={selectedWishlist}
-              options={[
-                { value: "", label: "Sin vínculo" },
-                ...wishlistItems.map((item) => ({
-                  value: item.id,
-                  label: `${item.name}${item.estimatedPrice ? ` (L${item.estimatedPrice})` : ""}`,
-                })),
-              ]}
-              onChange={(v) => setSelectedWishlist(v as string)}
-              fullWidth
-            />
-            <input type="hidden" name="wishlistItemId" value={selectedWishlist} />
-          </div>
+          {wishlistItems.length > 0 ? (
+            <div className="relative">
+              <CustomSelect
+                value={selectedWishlist}
+                options={[
+                  { value: "", label: "Sin vínculo" },
+                  ...wishlistItems.map((item) => ({
+                    value: item.id,
+                    label: `${item.name}${item.estimatedPrice ? ` (L${item.estimatedPrice})` : ""}`,
+                  })),
+                ]}
+                onChange={(v) => handleWishlistSelect(v as string)}
+                fullWidth
+              />
+              <input type="hidden" name="wishlistItemId" value={selectedWishlist} />
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 font-medium bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">
+              No tienes deseos activos. Crea uno en la sección Deseos.
+            </p>
+          )}
+          {selectedWishlist && (
+            <p className="text-xs text-blue-600 font-semibold">
+              Al registrar, el deseo se marcará como comprado y el monto contará en tus gastos del mes.
+            </p>
+          )}
         </div>
       )}
 

@@ -5,6 +5,10 @@ import { z } from "zod"
 import { auth } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 import { getAvailableBalance as calcAvailableBalance } from "@/lib/balance"
+import {
+  calcWishlistSavedAmount,
+  recordWishlistPurchase,
+} from "@/lib/wishlist-purchase"
 
 const createSchema = z.object({
   name: z.string().min(1, "El nombre es requerido").max(120).trim(),
@@ -70,7 +74,7 @@ export async function listWishlistItems() {
 
   return data.map((item) => {
     const totalAportado = item.transactions
-      .filter((t) => t.type === "expense")
+      .filter((t) => t.type === "expense" && t.category === "Ahorro")
       .reduce((sum, t) => {
         const val = t.amount.toNumber()
         const converted = (t.currency === "$" && t.exchangeRate)
@@ -80,7 +84,7 @@ export async function listWishlistItems() {
       }, 0)
 
     const totalRetirado = item.transactions
-      .filter((t) => t.type === "income")
+      .filter((t) => t.type === "income" && t.category === "Retiro Ahorro")
       .reduce((sum, t) => {
         const val = t.amount.toNumber()
         const converted = (t.currency === "$" && t.exchangeRate)
@@ -129,17 +133,46 @@ export async function togglePurchased(id: string) {
   const parsed = idSchema.safeParse(id)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
-  const item = await prisma.wishlistItem.findUnique({ where: { id: parsed.data } })
+  const item = await prisma.wishlistItem.findUnique({
+    where: { id: parsed.data },
+    include: {
+      transactions: { where: { deletedAt: null, userId: session.user.id } },
+    },
+  })
   if (!item) return { error: "El elemento no existe" }
   if (item.userId !== session.user.id) return { error: "No autorizado" }
 
-  await prisma.wishlistItem.update({
-    where: { id: parsed.data },
-    data: { purchased: !item.purchased },
-  })
+  if (!item.purchased) {
+    const purchaseAmount =
+      item.estimatedPrice?.toNumber() ?? calcWishlistSavedAmount(item.transactions)
+
+    if (purchaseAmount > 0) {
+      await recordWishlistPurchase({
+        userId: session.user.id,
+        itemId: item.id,
+        itemName: item.name,
+        purchaseAmount,
+        currency: item.currency,
+        exchangeRate: item.exchangeRate?.toNumber() ?? null,
+        existingTransactions: item.transactions,
+      })
+    } else {
+      await prisma.wishlistItem.update({
+        where: { id: parsed.data },
+        data: { purchased: true },
+      })
+    }
+  } else {
+    await prisma.wishlistItem.update({
+      where: { id: parsed.data },
+      data: { purchased: false },
+    })
+  }
 
   revalidatePath("/")
   revalidatePath("/wishlist")
+  revalidatePath("/transacciones")
+  revalidatePath("/historial")
   return { success: true }
 }
 
@@ -208,19 +241,35 @@ export async function addFundsToWishlist(id: string, amount: number) {
 
   // Verificar si con este aporte se alcanza la meta
   const totalAportado = item.transactions
-    .filter((t) => t.type === "expense")
+    .filter((t) => t.type === "expense" && t.category === "Ahorro")
     .reduce((sum, t) => sum + t.amount.toNumber(), 0) + amount
 
   const totalRetirado = item.transactions
-    .filter((t) => t.type === "income")
+    .filter((t) => t.type === "income" && t.category === "Retiro Ahorro")
     .reduce((sum, t) => sum + t.amount.toNumber(), 0)
 
   const nuevoAhorro = totalAportado - totalRetirado
 
   if (item.estimatedPrice && nuevoAhorro >= item.estimatedPrice.toNumber() && !item.purchased) {
-    await prisma.wishlistItem.update({
-      where: { id: item.id },
-      data: { purchased: true }
+    const updatedTransactions = [
+      ...item.transactions,
+      {
+        type: "expense",
+        amount: { toNumber: () => amount },
+        currency: "L",
+        exchangeRate: null,
+        category: "Ahorro",
+      },
+    ]
+
+    await recordWishlistPurchase({
+      userId: session.user.id,
+      itemId: item.id,
+      itemName: item.name,
+      purchaseAmount: item.estimatedPrice.toNumber(),
+      currency: item.currency,
+      exchangeRate: item.exchangeRate?.toNumber() ?? null,
+      existingTransactions: updatedTransactions,
     })
   }
 
@@ -247,11 +296,11 @@ export async function withdrawFundsFromWishlist(id: string, amount: number) {
   if (item.userId !== session.user.id) return { error: "No autorizado" }
 
   const totalAportado = item.transactions
-    .filter((t) => t.type === "expense")
+    .filter((t) => t.type === "expense" && t.category === "Ahorro")
     .reduce((sum, t) => sum + t.amount.toNumber(), 0)
 
   const totalRetirado = item.transactions
-    .filter((t) => t.type === "income")
+    .filter((t) => t.type === "income" && t.category === "Retiro Ahorro")
     .reduce((sum, t) => sum + t.amount.toNumber(), 0)
 
   const ahorroActual = totalAportado - totalRetirado

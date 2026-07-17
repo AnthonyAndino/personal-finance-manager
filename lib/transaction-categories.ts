@@ -16,6 +16,17 @@ export const INTERNAL_TRANSFER_CATEGORIES = new Set([
 export const TRANSFER_EXPENSE_CATEGORIES = new Set(["Ahorro", "Fondo Emergencia"])
 export const TRANSFER_INCOME_CATEGORIES = new Set(["Retiro Ahorro", "Retiro Fondo Emergencia"])
 
+/** Gasto real al comprar un deseo — sí cuenta en el resumen mensual */
+export const WISHLIST_PURCHASE_CATEGORY = "Compra Deseo"
+
+export function isWishlistSavingsExpense(type: string, category: string): boolean {
+  return type === "expense" && category === "Ahorro"
+}
+
+export function isWishlistPurchaseTransaction(type: string, category: string): boolean {
+  return type === "expense" && category !== "Ahorro"
+}
+
 export function isExcludedFromMonthlySummary(category: string): boolean {
   return INTERNAL_TRANSFER_CATEGORIES.has(category)
 }

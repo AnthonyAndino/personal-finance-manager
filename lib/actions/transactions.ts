@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { auth } from "@/lib/auth"
 import prisma from "@/lib/prisma"
+import { recordWishlistPurchase } from "@/lib/wishlist-purchase"
 
 const createSchema = z.object({
   type: z.enum(["income", "expense"]),
@@ -44,14 +45,27 @@ export async function createTransaction(
   }
 
   let wishlistItemId: string | null = null
+  let wishlistItem: { id: string; name: string; purchased: boolean; transactions: { type: string; amount: { toNumber(): number }; currency: string; exchangeRate: { toNumber(): number } | null; category: string }[] } | null = null
+
   if (parsed.data.wishlistItemId) {
-    const wishlistItem = await prisma.wishlistItem.findUnique({
+    if (parsed.data.type !== "expense") {
+      return { error: "Solo puedes vincular un deseo a gastos" }
+    }
+
+    const item = await prisma.wishlistItem.findUnique({
       where: { id: parsed.data.wishlistItemId },
+      include: {
+        transactions: { where: { deletedAt: null, userId: session.user.id } },
+      },
     })
-    if (!wishlistItem || wishlistItem.userId !== session.user.id) {
+    if (!item || item.userId !== session.user.id) {
       return { error: "El deseo seleccionado no es válido" }
     }
-    wishlistItemId = wishlistItem.id
+    if (item.purchased) {
+      return { error: "Este deseo ya está marcado como comprado" }
+    }
+    wishlistItemId = item.id
+    wishlistItem = item
   }
 
   let exchangeRate: number | null = null
@@ -77,9 +91,25 @@ export async function createTransaction(
     },
   })
 
+  if (wishlistItem && wishlistItemId) {
+    await recordWishlistPurchase({
+      userId: session.user.id,
+      itemId: wishlistItemId,
+      itemName: wishlistItem.name,
+      purchaseAmount: parsed.data.amount,
+      currency: parsed.data.currency,
+      exchangeRate,
+      date: parsedDate,
+      description: parsed.data.description ?? `Compra: ${wishlistItem.name}`,
+      skipPurchaseExpense: true,
+      existingTransactions: wishlistItem.transactions,
+    })
+  }
+
   revalidatePath("/")
   revalidatePath("/transacciones")
   revalidatePath("/historial")
+  revalidatePath("/wishlist")
   return { success: true }
 }
 
