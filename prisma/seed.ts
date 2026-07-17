@@ -18,15 +18,26 @@ function randomAmount(min: number, max: number) {
 }
 
 async function main() {
-  console.log("Seeding demo data...")
+  if (process.env.NODE_ENV === "production" && process.env.SEED_DEMO !== "true") {
+    console.log("Seed omitido en producción. Usa SEED_DEMO=true solo si lo necesitas en un entorno de prueba.")
+    return
+  }
 
-  const hashed = await bcrypt.hash("demo123", 10)
+  const demoPassword = process.env.DEMO_PASSWORD
+  if (!demoPassword || demoPassword.length < 10) {
+    console.error("Define DEMO_PASSWORD (mín. 10 caracteres) para sembrar datos de demo en desarrollo.")
+    process.exit(1)
+  }
+
+  console.log("Seeding demo data (solo desarrollo)...")
+
+  const hashed = await bcrypt.hash(demoPassword, 12)
   const user = await prisma.user.upsert({
     where: { email: "demo@test.com" },
     update: {},
     create: { name: "Demo", email: "demo@test.com", password: hashed },
   })
-  console.log(`  ✓ Demo user (demo@test.com / demo123)`)
+  console.log("  ✓ Demo user creado (demo@test.com)")
 
   await prisma.transaction.deleteMany({ where: { userId: user.id } })
   await prisma.wishlistItem.deleteMany({ where: { userId: user.id } })
@@ -88,7 +99,7 @@ async function main() {
       description: desc,
       userId: user.id,
       currency: isUSD ? "$" : "L",
-      exchangeRate: isUSD ? 25.00 : null,
+      exchangeRate: isUSD ? 25.0 : null,
     })
   }
 
@@ -108,7 +119,7 @@ async function main() {
 
   const incomeTotal = transactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0)
   const expenseTotal = transactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0)
-  console.log(`  ✓ ${transactions.length} transactions ($${incomeTotal.toFixed(0)} income, $${expenseTotal.toFixed(0)} expense)`)
+  console.log(`  ✓ ${transactions.length} transactions (L${incomeTotal.toFixed(0)} income, L${expenseTotal.toFixed(0)} expense)`)
 
   const wishlistItems = [
     { name: "Llantas nuevas", estimatedPrice: 4800, priority: "alta", purchased: false },
@@ -125,8 +136,7 @@ async function main() {
     })
   }
   console.log(`  ✓ ${wishlistItems.length} wishlist items`)
-
-  console.log("\nDone! Login: demo@test.com / demo123")
+  console.log("\nDone! Usa demo@test.com con la contraseña definida en DEMO_PASSWORD.")
 }
 
 main()

@@ -7,9 +7,9 @@ import prisma from "@/lib/prisma"
 
 const createSchema = z.object({
   type: z.enum(["income", "expense"]),
-  amount: z.number().positive("El monto debe ser positivo"),
-  category: z.string().min(1, "La categoría es requerida").trim(),
-  description: z.string().optional(),
+  amount: z.number().positive("El monto debe ser positivo").max(999_999_999),
+  category: z.string().min(1, "La categoría es requerida").max(80).trim(),
+  description: z.string().max(500).optional(),
   date: z.string().min(1, "La fecha es requerida"),
   wishlistItemId: z.string().optional(),
   currency: z.enum(["$", "L"]).default("L"),
@@ -38,17 +38,42 @@ export async function createTransaction(
     return { error: parsed.error.issues[0].message }
   }
 
+  const parsedDate = new Date(parsed.data.date)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { error: "Fecha inválida" }
+  }
+
+  let wishlistItemId: string | null = null
+  if (parsed.data.wishlistItemId) {
+    const wishlistItem = await prisma.wishlistItem.findUnique({
+      where: { id: parsed.data.wishlistItemId },
+    })
+    if (!wishlistItem || wishlistItem.userId !== session.user.id) {
+      return { error: "El deseo seleccionado no es válido" }
+    }
+    wishlistItemId = wishlistItem.id
+  }
+
+  let exchangeRate: number | null = null
+  if (parsed.data.exchangeRate) {
+    const rate = Number(parsed.data.exchangeRate)
+    if (!Number.isFinite(rate) || rate <= 0 || rate > 9999) {
+      return { error: "Tipo de cambio inválido" }
+    }
+    exchangeRate = rate
+  }
+
   await prisma.transaction.create({
     data: {
       type: parsed.data.type,
       amount: parsed.data.amount,
       category: parsed.data.category,
       description: parsed.data.description,
-      date: new Date(parsed.data.date),
+      date: parsedDate,
       userId: session.user.id,
-      wishlistItemId: parsed.data.wishlistItemId ?? null,
+      wishlistItemId,
       currency: parsed.data.currency,
-      exchangeRate: parsed.data.exchangeRate ? Number(parsed.data.exchangeRate) : null,
+      exchangeRate,
     },
   })
 

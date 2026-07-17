@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { getDefaultRate } from "@/lib/currency"
+import { sanitizeExcelCell } from "@/lib/sanitize"
 
 // ─── HELPERS ─────────────────────────────────
 
@@ -361,10 +362,10 @@ function buildDetailSheet(
     row.getCell(3).font = DATA_FONT
     row.getCell(3).alignment = { horizontal: "center" }
 
-    row.getCell(4).value = t.category
+    row.getCell(4).value = sanitizeExcelCell(t.category)
     row.getCell(4).font = { ...DATA_FONT, bold: true }
 
-    row.getCell(5).value = t.description ?? "—"
+    row.getCell(5).value = sanitizeExcelCell(t.description)
     row.getCell(5).font = DATA_FONT
 
     row.getCell(6).value = sym
@@ -448,7 +449,7 @@ export async function GET(req: NextRequest) {
     req.headers.get("x-real-ip") ??
     "unknown"
 
-  const withinLimit = rateLimit(`export:${ip}`, 30, 60_000)
+  const withinLimit = await rateLimit(`export:${ip}`, 30, 60_000)
   if (!withinLimit.success) {
     return NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 })
   }

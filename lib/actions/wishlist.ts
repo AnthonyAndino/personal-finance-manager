@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 
 const createSchema = z.object({
-  name: z.string().min(1, "El nombre es requerido").trim(),
+  name: z.string().min(1, "El nombre es requerido").max(120).trim(),
   estimatedPrice: z.preprocess(
     (v) => (v === "" || v === null || v === undefined ? undefined : Number(v)),
     z.number().positive("El precio debe ser positivo").optional(),
@@ -61,8 +61,8 @@ export async function listWishlistItems() {
     where: { userId: session.user.id },
     include: {
       transactions: {
-        where: { deletedAt: null }
-      }
+        where: { deletedAt: null, userId: session.user.id },
+      },
     },
     orderBy: { createdAt: "desc" },
   })
@@ -172,7 +172,7 @@ export async function addFundsToWishlist(id: string, amount: number) {
   const item = await prisma.wishlistItem.findUnique({
     where: { id },
     include: {
-      transactions: { where: { deletedAt: null } }
+      transactions: { where: { deletedAt: null, userId: session.user.id } }
     }
   })
   if (!item) return { error: "El elemento no existe" }
@@ -252,7 +252,7 @@ export async function withdrawFundsFromWishlist(id: string, amount: number) {
   const item = await prisma.wishlistItem.findUnique({
     where: { id },
     include: {
-      transactions: { where: { deletedAt: null } }
+      transactions: { where: { deletedAt: null, userId: session.user.id } }
     }
   })
   if (!item) return { error: "El elemento no existe" }
@@ -301,7 +301,7 @@ export async function withdrawFundsFromWishlist(id: string, amount: number) {
 
 const updateSchema = z.object({
   id: z.string().min(1),
-  name: z.string().min(1, "El nombre es requerido").trim(),
+  name: z.string().min(1, "El nombre es requerido").max(120).trim(),
   estimatedPrice: z.preprocess(
     (v) => (v === "" || v === null || v === undefined ? undefined : Number(v)),
     z.number().positive("El precio debe ser positivo").optional(),

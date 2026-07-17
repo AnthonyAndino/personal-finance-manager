@@ -35,6 +35,7 @@ yarn-error.log*
 .env.local
 .env.production
 .env.vercel.production
+.family-pass.tmp
 
 # local config files
 opencode.json

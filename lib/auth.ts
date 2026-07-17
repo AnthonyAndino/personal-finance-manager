@@ -6,6 +6,8 @@ import prisma from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { authConfig } from "./auth.config"
 
+const DUMMY_HASH = bcrypt.hashSync("__invalid-login__", 12)
+
 const loginSchema = z.object({
   email: z.string().email("Correo inválido"),
   password: z.string().min(1, "Contraseña requerida"),
@@ -52,16 +54,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           request.headers.get("x-real-ip") ??
           "unknown"
 
-        const withinLimit = rateLimit(`login:${ip}`, 5, 15 * 60_000)
+        const withinLimit = await rateLimit(`login:${ip}:${parsed.data.email}`, 5, 15 * 60_000)
         if (!withinLimit.success) return null
 
         const { email, password } = parsed.data
 
         const user = await prisma.user.findUnique({ where: { email } })
-        if (!user) return null
-
-        const valid = await bcrypt.compare(password, user.password)
-        if (!valid) return null
+        const valid = user
+          ? await bcrypt.compare(password, user.password)
+          : await bcrypt.compare(password, DUMMY_HASH)
+        if (!user || !valid) return null
 
         return { id: user.id, name: user.name, email: user.email }
       },

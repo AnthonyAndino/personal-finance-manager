@@ -48,3 +48,9 @@ model WishlistItem {
   transactions   Transaction[]
   createdAt      DateTime      @default(now())
 }
+
+model RateLimitEntry {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+}

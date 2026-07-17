@@ -61,13 +61,16 @@ npm run dev
 
 Abre [http://localhost:3000](http://localhost:3000).
 
-### Usuario de prueba
+### Datos de prueba (solo desarrollo)
 
-| Email | Contraseña |
-|-------|-----------|
-| demo@test.com | demo123 |
+El seed **no corre en producción**. En local, define una contraseña segura en `.env`:
 
-> Incluye transacciones de ejemplo y artículos en la lista de deseos.
+```bash
+DEMO_PASSWORD="tu_contraseña_segura_de_al_menos_10_caracteres"
+npx prisma db seed
+```
+
+Crea el usuario `demo@test.com` solo en tu base de datos local.
 
 ## Deploy (Vercel + Supabase)
 
@@ -79,7 +82,10 @@ Abre [http://localhost:3000](http://localhost:3000).
      ```bash
      node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
      ```
-4. Al hacer deploy, las migraciones se aplican automáticamente (`vercel-build` ejecuta `prisma migrate deploy` antes del build)
+4. Al hacer deploy, las migraciones y el hardening de seguridad se aplican automáticamente (`vercel-build`)
+5. Para rotar contraseñas de usuarios `@cuentas.com` en un deploy, define temporalmente en Vercel:
+   - `FAMILY_NEW_PASSWORD` — contraseña nueva (mín. 10 caracteres, compártela solo con tu familia)
+   - Elimínala de Vercel después del deploy
 
 Para migrar manualmente contra producción:
 
