@@ -48,10 +48,18 @@ function formatTotalsSubtitle(txs: TxLike[]): string {
   return parts.join("  •  ")
 }
 
+const HONDURAS_OFFSET_MS = 6 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function toLocal(d: Date): Date {
+  return new Date(d.getTime() - HONDURAS_OFFSET_MS)
+}
+
 function formatDate(d: Date): string {
-  const day = String(d.getDate()).padStart(2, "0")
-  const month = String(d.getMonth() + 1).padStart(2, "0")
-  const year = d.getFullYear()
+  const local = toLocal(d)
+  const day = String(local.getDate()).padStart(2, "0")
+  const month = String(local.getMonth() + 1).padStart(2, "0")
+  const year = local.getFullYear()
   return `${day}/${month}/${year}`
 }
 
@@ -622,16 +630,21 @@ export async function GET(req: NextRequest) {
   const year = parseInt(yearStr, 10)
   const monthNum = parseInt(monthStr, 10)
 
-  const start = new Date(year, monthNum - 1, 1)
-  const end = new Date(year, monthNum, 1)
+  const start = new Date(Date.UTC(year, monthNum - 1, 1))
+  const end = new Date(Date.UTC(year, monthNum, 1))
 
-  const transactions = await prisma.transaction.findMany({
+  const raw = await prisma.transaction.findMany({
     where: {
       userId: session.user.id,
       deletedAt: null,
-      date: { gte: start, lt: end },
+      date: { gte: new Date(start.getTime() - DAY_MS), lt: new Date(end.getTime() + DAY_MS) },
     },
     orderBy: { date: "asc" },
+  })
+
+  const transactions = raw.filter((t) => {
+    const local = toLocal(t.date)
+    return local.getFullYear() === year && local.getMonth() === monthNum - 1
   })
 
   const exchangeRate = await getDefaultRate()
@@ -658,6 +671,19 @@ export async function GET(req: NextRequest) {
     year: "numeric",
   })
 
+  async function getMonthTotals(y: number, m: number, uid: string) {
+    const msStart = new Date(Date.UTC(y, m, 1))
+    const msEnd = new Date(Date.UTC(y, m + 1, 1))
+    const raw = await prisma.transaction.findMany({
+      where: { userId: uid, deletedAt: null, date: { gte: new Date(msStart.getTime() - DAY_MS), lt: new Date(msEnd.getTime() + DAY_MS) } },
+      select: { date: true, type: true, amount: true, currency: true, category: true },
+    })
+    return raw.filter((t) => {
+      const local = toLocal(t.date)
+      return local.getFullYear() === y && local.getMonth() === m
+    })
+  }
+
   // ── Monthly evolution data (last 6 months) ──
   const MONTHS_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
   const monthlyData: { label: string; income: number; expense: number }[] = []
@@ -665,13 +691,7 @@ export async function GET(req: NextRequest) {
     let m = monthNum - 1 - i
     let y = year
     if (m < 0) { m += 12; y-- }
-    const mStart = new Date(y, m, 1)
-    const mEnd = new Date(y, m + 1, 1)
-
-    const mTxs = await prisma.transaction.findMany({
-      where: { userId: session.user.id, deletedAt: null, date: { gte: mStart, lt: mEnd } },
-      select: { type: true, amount: true, currency: true, category: true },
-    })
+    const mTxs = await getMonthTotals(y, m, session.user.id)
 
     let incL = 0
     let expL = 0
@@ -690,13 +710,7 @@ export async function GET(req: NextRequest) {
     let m = monthNum - 1 - i
     let y = year
     if (m < 0) { m += 12; y-- }
-    const mStart = new Date(y, m, 1)
-    const mEnd = new Date(y, m + 1, 1)
-
-    const mTxs = await prisma.transaction.findMany({
-      where: { userId: session.user.id, deletedAt: null, date: { gte: mStart, lt: mEnd } },
-      select: { type: true, amount: true, currency: true, category: true },
-    })
+    const mTxs = await getMonthTotals(y, m, session.user.id)
 
     accBalanceL += getGananciaNeta(mTxs, (t) =>
       amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate),

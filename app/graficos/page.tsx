@@ -9,10 +9,39 @@ import { getDefaultRate } from "@/lib/exchange-rate"
 import { isOperationalExpense, isOperationalIncome } from "@/lib/transaction-categories"
 import { getGananciaNeta } from "@/lib/balance"
 
+const HONDURAS_OFFSET_MS = 6 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function toLocal(d: Date): Date {
+  return new Date(d.getTime() - HONDURAS_OFFSET_MS)
+}
+
 function getMonthRange(year: number, month: number) {
-  const start = new Date(year, month, 1)
-  const end = new Date(year, month + 1, 1)
+  const start = new Date(Date.UTC(year, month, 1))
+  const end = new Date(Date.UTC(year, month + 1, 1))
   return { start, end }
+}
+
+async function getMonthTransactions(
+  year: number,
+  month: number,
+  userId: string,
+  extraWhere?: Record<string, unknown>,
+) {
+  const { start, end } = getMonthRange(year, month)
+  const raw = await prisma.transaction.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      ...extraWhere,
+      date: { gte: new Date(start.getTime() - DAY_MS), lt: new Date(end.getTime() + DAY_MS) },
+    } as any,
+    select: { date: true, type: true, amount: true, currency: true, category: true },
+  })
+  return raw.filter((t) => {
+    const local = toLocal(t.date)
+    return local.getFullYear() === year && local.getMonth() === month
+  })
 }
 
 const MONTHS_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
@@ -23,8 +52,9 @@ export default async function GraficosPage() {
 
   const userId = session.user.id
   const now = new Date()
-  const currentMonth = now.getMonth()
-  const currentYear = now.getFullYear()
+  const localNow = toLocal(now)
+  const currentMonth = localNow.getUTCMonth()
+  const currentYear = localNow.getUTCFullYear()
 
   const userPref = await prisma.user.findUnique({
     where: { id: userId },
@@ -39,12 +69,7 @@ export default async function GraficosPage() {
     let m = currentMonth - i
     let y = currentYear
     if (m < 0) { m += 12; y-- }
-    const { start, end } = getMonthRange(y, m)
-
-    const totals = await prisma.transaction.findMany({
-      where: { userId, deletedAt: null, date: { gte: start, lt: end } },
-      select: { type: true, amount: true, currency: true, category: true },
-    })
+    const totals = await getMonthTransactions(y, m, userId)
 
     let incomeL = 0
     let expenseL = 0
@@ -64,11 +89,7 @@ export default async function GraficosPage() {
   const maxMonthly = Math.max(...monthlyData.flatMap((d) => [d.income, d.expense]), 100)
 
   // ── 2. Expense Distribution ──
-  const { start: monthStart, end: monthEnd } = getMonthRange(currentYear, currentMonth)
-
-  const monthExpenses = await prisma.transaction.findMany({
-    where: { userId, deletedAt: null, type: "expense", date: { gte: monthStart, lt: monthEnd } },
-  })
+  const monthExpenses = await getMonthTransactions(currentYear, currentMonth, userId, { type: "expense" })
 
   const gastosPorCategoriaL: Record<string, number> = {}
   monthExpenses
@@ -93,12 +114,7 @@ export default async function GraficosPage() {
     let m = currentMonth - i
     let y = currentYear
     if (m < 0) { m += 12; y-- }
-    const { start, end } = getMonthRange(y, m)
-
-    const totals = await prisma.transaction.findMany({
-      where: { userId, deletedAt: null, date: { gte: start, lt: end } },
-      select: { type: true, amount: true, currency: true, category: true },
-    })
+    const totals = await getMonthTransactions(y, m, userId)
 
     accBalanceL += getGananciaNeta(totals, (t) =>
       amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate),
@@ -116,7 +132,8 @@ export default async function GraficosPage() {
 
   const DONUT_COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316"]
 
-  const mesAno = now.toISOString().slice(0, 7)
+  const monthStr = String(currentMonth + 1).padStart(2, "0")
+  const mesAno = `${currentYear}-${monthStr}`
 
   return (
     <div className="flex flex-1 flex-col w-full min-h-screen lg:pl-64 pb-16 lg:pb-0">
