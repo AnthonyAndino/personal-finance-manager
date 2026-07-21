@@ -39,7 +39,8 @@ export async function createTransaction(
     return { error: parsed.error.issues[0].message }
   }
 
-  const parsedDate = new Date(parsed.data.date)
+  const [y, m, d] = parsed.data.date.split("-").map(Number)
+  const parsedDate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0))
   if (Number.isNaN(parsedDate.getTime())) {
     return { error: "Fecha inválida" }
   }

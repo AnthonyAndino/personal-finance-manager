@@ -377,7 +377,7 @@ export function TransactionForm({ defaultRate = 26.75 }: { defaultRate?: number 
             }}
           />
           <Calendar size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input type="hidden" name="date" value={selectedDate.toISOString().split("T")[0]} />
+          <input type="hidden" name="date" value={`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`} />
         </div>
       </div>
 
