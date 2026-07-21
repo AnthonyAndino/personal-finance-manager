@@ -60,7 +60,7 @@ export default function HistorialPage() {
   const columns = useMemo(() => [
     columnHelper.accessor("date", {
       header: "Fecha",
-      cell: (info) => new Date(info.getValue()).toLocaleDateString("es-MX", { day: "2-digit", month: "short" }),
+      cell: (info) => new Date(info.getValue()).toLocaleDateString("es-MX", { day: "2-digit", month: "short", timeZone: "UTC" }),
       sortingFn: "datetime",
     }),
     columnHelper.accessor("type", {
