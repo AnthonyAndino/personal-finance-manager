@@ -211,11 +211,11 @@ function generateBarChartSVG(
   title: string = "Ingresos vs Gastos",
 ): string {
   const width = 480
-  const height = 300
+  const height = 320
   const chartLeft = 50
   const chartRight = width - 30
-  const chartTop = 50
-  const chartBottom = height - 55
+  const chartTop = 60
+  const chartBottom = height - 50
   const chartHeight = chartBottom - chartTop
   const maxValue = Math.max(...data.map((d) => d.value), 1)
   const barWidth = Math.min(72, ((chartRight - chartLeft) / data.length) * 0.55)
@@ -227,6 +227,13 @@ function generateBarChartSVG(
     const y = chartBottom - (i / 4) * chartHeight
     gridLines.push(`<line x1="${chartLeft}" y1="${y}" x2="${chartRight}" y2="${y}" stroke="#E2E8F0" stroke-width="1" />`)
   }
+
+  const topLegend = `
+    <rect x="${width / 2 - 85}" y="38" width="12" height="12" rx="2" fill="#059669" />
+    <text x="${width / 2 - 69}" y="48" font-family="Calibri, Arial, sans-serif" font-size="12" font-weight="bold" fill="#059669">Ingresos</text>
+    <rect x="${width / 2 + 5}" y="38" width="12" height="12" rx="2" fill="#DC2626" />
+    <text x="${width / 2 + 21}" y="48" font-family="Calibri, Arial, sans-serif" font-size="12" font-weight="bold" fill="#DC2626">Gastos</text>
+  `
 
   const barsAndLabels = data.map((d, i) => {
     const barH = Math.max(6, (d.value / maxValue) * chartHeight)
@@ -241,13 +248,14 @@ function generateBarChartSVG(
     return `
       <rect x="${x}" y="${y}" width="${barWidth}" height="${barH}" fill="${d.color}" rx="6" />
       <text x="${labelX}" y="${y - 8}" text-anchor="middle" font-family="Calibri, Arial, sans-serif" font-size="10" font-weight="bold" fill="${d.color}">${escapeXml(valueLabel)}</text>
-      <text x="${labelX}" y="${chartBottom + 22}" text-anchor="middle" font-family="Calibri, Arial, sans-serif" font-size="10" font-weight="bold" fill="#334155">${escapeXml(d.label)}</text>
+      <text x="${labelX}" y="${chartBottom + 18}" text-anchor="middle" font-family="Calibri, Arial, sans-serif" font-size="10" font-weight="bold" fill="#334155">${escapeXml(d.label)}</text>
     `
   })
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <rect width="${width}" height="${height}" fill="white" rx="8" />
-    <text x="${width / 2}" y="28" text-anchor="middle" font-family="Calibri, Arial, sans-serif" font-size="13" font-weight="bold" fill="#0F172A">${escapeXml(title)}</text>
+    <text x="${width / 2}" y="26" text-anchor="middle" font-family="Calibri, Arial, sans-serif" font-size="13" font-weight="bold" fill="#0F172A">${escapeXml(title)}</text>
+    ${topLegend}
     ${gridLines.join("\n")}
     <line x1="${chartLeft}" y1="${chartBottom}" x2="${chartRight}" y2="${chartBottom}" stroke="#CBD5E1" stroke-width="1" />
     ${barsAndLabels.join("\n")}
@@ -261,10 +269,10 @@ function generateMonthlyEvolutionSVG(
   currencySymbol: string = "L",
 ): string {
   const width = 580
-  const height = 320
+  const height = 340
   const chartLeft = 55
   const chartRight = width - 30
-  const chartTop = 55
+  const chartTop = 60
   const chartBottom = height - 55
   const chartHeight = chartBottom - chartTop
   const maxValue = Math.max(...data.flatMap((d) => [d.income, d.expense]), 1)
@@ -279,6 +287,14 @@ function generateMonthlyEvolutionSVG(
     gridLines.push(`<line x1="${chartLeft}" y1="${y}" x2="${chartRight}" y2="${y}" stroke="#E2E8F0" stroke-width="1" />`)
     gridLines.push(`<text x="${chartLeft - 8}" y="${y + 4}" text-anchor="end" font-family="Calibri, Arial, sans-serif" font-size="9" fill="#94A3B8">${currencySymbol}${val.toLocaleString("en-US")}</text>`)
   }
+
+  // Top legend (visible without scrolling)
+  const topLegend = `
+    <rect x="${width / 2 - 82}" y="40" width="12" height="12" rx="2" fill="#10B981" />
+    <text x="${width / 2 - 66}" y="50" font-family="Calibri, Arial, sans-serif" font-size="12" font-weight="bold" fill="#059669">Ingresos</text>
+    <rect x="${width / 2 + 5}" y="40" width="12" height="12" rx="2" fill="#EF4444" />
+    <text x="${width / 2 + 21}" y="50" font-family="Calibri, Arial, sans-serif" font-size="12" font-weight="bold" fill="#DC2626">Gastos</text>
+  `
 
   const bars = data.map((d, i) => {
     const groupCx = chartLeft + groupWidth * i + groupWidth / 2
@@ -300,24 +316,14 @@ function generateMonthlyEvolutionSVG(
     `
   })
 
-  // Legend
-  const legendX = width / 2 - 80
-  const legendY = height - 12
-  const legend = `
-    <rect x="${legendX}" y="${legendY - 8}" width="10" height="10" rx="2" fill="#10B981" />
-    <text x="${legendX + 14}" y="${legendY}" font-family="Calibri, Arial, sans-serif" font-size="10" fill="#334155">Ingresos</text>
-    <rect x="${legendX + 80}" y="${legendY - 8}" width="10" height="10" rx="2" fill="#EF4444" />
-    <text x="${legendX + 94}" y="${legendY}" font-family="Calibri, Arial, sans-serif" font-size="10" fill="#334155">Gastos</text>
-  `
-
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <rect width="${width}" height="${height}" fill="white" rx="8" />
-    <text x="${width / 2}" y="28" text-anchor="middle" font-family="Calibri, Arial, sans-serif" font-size="14" font-weight="bold" fill="#0F172A">${escapeXml(title)}</text>
+    <text x="${width / 2}" y="26" text-anchor="middle" font-family="Calibri, Arial, sans-serif" font-size="14" font-weight="bold" fill="#0F172A">${escapeXml(title)}</text>
     <text x="${width / 2}" y="44" text-anchor="middle" font-family="Calibri, Arial, sans-serif" font-size="10" fill="#94A3B8">Últimos 6 meses</text>
+    ${topLegend}
     ${gridLines.join("\n")}
     <line x1="${chartLeft}" y1="${chartBottom}" x2="${chartRight}" y2="${chartBottom}" stroke="#CBD5E1" stroke-width="1" />
     ${bars.join("\n")}
-    ${legend}
   </svg>`
 }
 
