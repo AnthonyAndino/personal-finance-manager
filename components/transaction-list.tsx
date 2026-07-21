@@ -100,7 +100,6 @@ export function TransactionList({ currency = "L" }: { currency?: string }) {
                   day: "2-digit",
                   month: "long",
                   year: "numeric",
-                  timeZone: "UTC",
                 })}
               </p>
             </div>

@@ -87,7 +87,7 @@ export default function PapeleraPage() {
   const columns = useMemo(() => [
     columnHelper.accessor("date", {
       header: "Fecha",
-      cell: (info) => new Date(info.getValue()).toLocaleDateString("es-MX", { day: "2-digit", month: "short", timeZone: "UTC" }),
+      cell: (info) => new Date(info.getValue()).toLocaleDateString("es-MX", { day: "2-digit", month: "short" }),
       sortingFn: "datetime",
     }),
     columnHelper.accessor("type", {
@@ -132,7 +132,7 @@ export default function PapeleraPage() {
       header: "Eliminado",
       cell: (info) => (
         <span className="text-xs text-slate-400 font-medium tabular-nums">
-          {new Date(info.getValue()).toLocaleDateString("es-MX", { day: "2-digit", month: "short", timeZone: "UTC" })}
+          {new Date(info.getValue()).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
         </span>
       ),
       sortingFn: "datetime",
