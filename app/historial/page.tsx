@@ -157,6 +157,13 @@ export default function HistorialPage() {
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize: 10 } },
+    globalFilterFn: (row, columnId, filterValue) => {
+      if (columnId === "date" || columnId === "deletedAt") {
+        const local = new Date(row.getValue(columnId) as string).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })
+        return local.toLowerCase().includes(String(filterValue).toLowerCase())
+      }
+      return String(row.getValue(columnId) ?? "").toLowerCase().includes(String(filterValue).toLowerCase())
+    },
   })
 
   return (
