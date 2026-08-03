@@ -17,6 +17,7 @@ import { useSession } from "next-auth/react"
 import { Sidebar } from "@/components/sidebar"
 import MonthPicker from "@/components/month-picker"
 import ConfirmDialog from "@/components/confirm-dialog"
+import { ExportButton } from "@/components/export-button"
 
 import { Trash, ChevronLeft, ChevronRight, ChevronExpandY, ArrowUp, ArrowDown } from "reicon-react"
 
@@ -215,6 +216,8 @@ export default function HistorialPage() {
           </div>
 
           <MonthPicker value={monthFilter} onChange={setMonthFilter} />
+
+          <ExportButton month={monthFilter} label="Exportar mes" />
 
           <input
             type="text"
