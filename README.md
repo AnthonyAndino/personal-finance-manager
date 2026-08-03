@@ -4,7 +4,7 @@
 
 Aplicación web para llevar el control de ingresos y gastos personales. Diseñada para personas sin experiencia con tecnología: interfaz simple, botones grandes, texto claro.
 
-**Demo en producción:** [finance-manager-anthony.vercel.app](https://finance-manager-anthony.vercel.app)
+
 
 ## Funcionalidades
 
