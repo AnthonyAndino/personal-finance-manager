@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
+import path from "path"
 import ExcelJS from "exceljs"
-import sharp from "sharp"
+import { Resvg } from "@resvg/resvg-js"
 import { auth } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
@@ -409,7 +410,16 @@ function placeChartImage(
 }
 
 async function svgToPng(svg: string): Promise<Buffer> {
-  return sharp(Buffer.from(svg)).png({ quality: 100 }).toBuffer() as unknown as Promise<Buffer>
+  const fontPath = path.join(process.cwd(), "fonts", "Inter-Regular.woff2")
+  const resvg = new Resvg(svg, {
+    font: {
+      fontFiles: [fontPath],
+      defaultFontFamily: "Inter",
+      loadSystemFonts: false,
+    },
+    fitTo: { mode: "original" },
+  })
+  return Buffer.from(resvg.render().asPng())
 }
 
 // ─── STYLE CONSTANTS ─────────────────────────
