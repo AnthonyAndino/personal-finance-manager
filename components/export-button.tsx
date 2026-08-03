@@ -2,9 +2,18 @@
 
 import { Download } from "reicon-react"
 
-export function ExportButton({ month, label = "Exportar" }: { month: string; label?: string }) {
+export function ExportButton({
+  month,
+  period = "month",
+  label = "Exportar",
+}: {
+  month: string
+  period?: "month" | "all"
+  label?: string
+}) {
   const handleExport = async () => {
-    const res = await fetch(`/api/export?month=${month}`)
+    const query = period === "all" ? "period=all" : `month=${month}`
+    const res = await fetch(`/api/export?${query}`)
     if (!res.ok) {
       alert("Error al generar el reporte")
       return
@@ -13,7 +22,8 @@ export function ExportButton({ month, label = "Exportar" }: { month: string; lab
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `Control-Gastos-${month}.xlsx`
+    a.download =
+      period === "all" ? "Control-Gastos-Historico-Acumulado.xlsx" : `Control-Gastos-${month}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }

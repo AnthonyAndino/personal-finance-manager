@@ -195,7 +195,7 @@ export default async function Home({
               <span className="text-slate-600">L{exchangeRate.toFixed(2)}</span>
             </div>
             <CurrencyToggle defaultCurrency={currency} />
-            <ExportButton month={mesAnoUrl} />
+            <ExportButton month={mesAnoUrl} period={period} />
           </div>
         </div>
       </header>

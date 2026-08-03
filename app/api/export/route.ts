@@ -267,6 +267,7 @@ function generateMonthlyEvolutionSVG(
   data: { label: string; income: number; expense: number }[],
   title: string = "Evolución Mensual",
   currencySymbol: string = "L",
+  subtitle: string = "Últimos 6 meses",
 ): string {
   const width = 580
   const height = 340
@@ -319,7 +320,7 @@ function generateMonthlyEvolutionSVG(
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <rect width="${width}" height="${height}" fill="white" rx="8" />
     <text x="${width / 2}" y="26" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="bold" fill="#0F172A">${escapeXml(title)}</text>
-    <text x="${width / 2}" y="44" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#94A3B8">Últimos 6 meses</text>
+    <text x="${width / 2}" y="44" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#94A3B8">${escapeXml(subtitle)}</text>
     ${topLegend}
     ${gridLines.join("\n")}
     <line x1="${chartLeft}" y1="${chartBottom}" x2="${chartRight}" y2="${chartBottom}" stroke="#CBD5E1" stroke-width="1" />
@@ -628,30 +629,49 @@ export async function GET(req: NextRequest) {
   }
 
   const month = req.nextUrl.searchParams.get("month")
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-    return NextResponse.json({ error: "Formato inválido. Usa YYYY-MM" }, { status: 400 })
+  const periodParam = req.nextUrl.searchParams.get("period")
+  const isAll = periodParam === "all"
+
+  if (!isAll && (!month || !/^\d{4}-\d{2}$/.test(month))) {
+    return NextResponse.json(
+      { error: "Formato inválido. Usa YYYY-MM o period=all" },
+      { status: 400 },
+    )
   }
 
-  const [yearStr, monthStr] = month.split("-")
-  const year = parseInt(yearStr, 10)
-  const monthNum = parseInt(monthStr, 10)
+  let year = 0
+  let monthNum = 0
+  if (month) {
+    const [yearStr, monthStr] = month.split("-")
+    year = parseInt(yearStr, 10)
+    monthNum = parseInt(monthStr, 10)
+  }
 
-  const start = new Date(Date.UTC(year, monthNum - 1, 1))
-  const end = new Date(Date.UTC(year, monthNum, 1))
+  const raw = isAll
+    ? await prisma.transaction.findMany({
+        where: { userId: session.user.id, deletedAt: null },
+        orderBy: { date: "asc" },
+      })
+    : await prisma.transaction.findMany({
+        where: {
+          userId: session.user.id,
+          deletedAt: null,
+          date: {
+            gte: new Date(
+              new Date(Date.UTC(year, monthNum - 1, 1)).getTime() - DAY_MS,
+            ),
+            lt: new Date(new Date(Date.UTC(year, monthNum, 1)).getTime() + DAY_MS),
+          },
+        },
+        orderBy: { date: "asc" },
+      })
 
-  const raw = await prisma.transaction.findMany({
-    where: {
-      userId: session.user.id,
-      deletedAt: null,
-      date: { gte: new Date(start.getTime() - DAY_MS), lt: new Date(end.getTime() + DAY_MS) },
-    },
-    orderBy: { date: "asc" },
-  })
-
-  const transactions = raw.filter((t) => {
-    const local = toLocal(t.date)
-    return local.getFullYear() === year && local.getMonth() === monthNum - 1
-  })
+  const transactions = isAll
+    ? raw
+    : raw.filter((t) => {
+        const local = toLocal(t.date)
+        return local.getFullYear() === year && local.getMonth() === monthNum - 1
+      })
 
   const exchangeRate = await getDefaultRate()
 
@@ -672,10 +692,12 @@ export async function GET(req: NextRequest) {
   const expenseCategories = aggregateByCategory(expenses, exchangeRate)
   const incomeCategories = aggregateByCategory(incomes, exchangeRate)
 
-  const monthName = new Date(year, monthNum - 1).toLocaleString("es-MX", {
-    month: "long",
-    year: "numeric",
-  })
+  const monthName = isAll
+    ? "Histórico Acumulado"
+    : new Date(year, monthNum - 1).toLocaleString("es-MX", {
+        month: "long",
+        year: "numeric",
+      })
 
   async function getMonthTotals(y: number, m: number, uid: string) {
     const msStart = new Date(Date.UTC(y, m, 1))
@@ -692,36 +714,62 @@ export async function GET(req: NextRequest) {
 
   // ── Monthly evolution data (last 6 months) ──
   const MONTHS_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-  const monthlyData: { label: string; income: number; expense: number }[] = []
-  for (let i = 5; i >= 0; i--) {
-    let m = monthNum - 1 - i
-    let y = year
-    if (m < 0) { m += 12; y-- }
-    const mTxs = await getMonthTotals(y, m, session.user.id)
 
-    let incL = 0
-    let expL = 0
-    mTxs.forEach((t) => {
+  // ── Monthly evolution data ──
+  // For "all": aggregate over every month present in the user's transactions.
+  // For month view: show last 6 months relative to the requested month.
+  let monthlyData: { label: string; income: number; expense: number }[] = []
+  let balanceData: { label: string; balance: number }[] = []
+
+  if (isAll) {
+    const perMonth = new Map<string, { y: number; m: number; incL: number; expL: number }>()
+    transactions.forEach((t) => {
+      const local = toLocal(t.date)
+      const key = `${local.getFullYear()}-${local.getMonth()}`
+      const entry = perMonth.get(key) ?? { y: local.getFullYear(), m: local.getMonth(), incL: 0, expL: 0 }
       const enL = amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate)
-      if (isOperationalIncome(t.type, t.category)) incL += enL
-      else if (isOperationalExpense(t.type, t.category)) expL += enL
+      if (isOperationalIncome(t.type, t.category)) entry.incL += enL
+      else if (isOperationalExpense(t.type, t.category)) entry.expL += enL
+      perMonth.set(key, entry)
     })
-    monthlyData.push({ label: MONTHS_SHORT[m], income: incL, expense: expL })
-  }
 
-  // ── Accumulated balance data (last 6 months) ──
-  let accBalanceL = 0
-  const balanceData: { label: string; balance: number }[] = []
-  for (let i = 5; i >= 0; i--) {
-    let m = monthNum - 1 - i
-    let y = year
-    if (m < 0) { m += 12; y-- }
-    const mTxs = await getMonthTotals(y, m, session.user.id)
+    const sorted = Array.from(perMonth.values()).sort((a, b) => a.y - b.y || a.m - b.m)
 
-    accBalanceL += getGananciaNeta(mTxs, (t) =>
-      amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate),
-    )
-    balanceData.push({ label: MONTHS_SHORT[m], balance: accBalanceL })
+    let accBalanceL = 0
+    sorted.forEach(({ y, m, incL, expL }) => {
+      monthlyData.push({ label: MONTHS_SHORT[m], income: incL, expense: expL })
+      accBalanceL += incL - expL
+      balanceData.push({ label: MONTHS_SHORT[m], balance: accBalanceL })
+    })
+  } else {
+    for (let i = 5; i >= 0; i--) {
+      let m = monthNum - 1 - i
+      let y = year
+      if (m < 0) { m += 12; y-- }
+      const mTxs = await getMonthTotals(y, m, session.user.id)
+
+      let incL = 0
+      let expL = 0
+      mTxs.forEach((t) => {
+        const enL = amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate)
+        if (isOperationalIncome(t.type, t.category)) incL += enL
+        else if (isOperationalExpense(t.type, t.category)) expL += enL
+      })
+      monthlyData.push({ label: MONTHS_SHORT[m], income: incL, expense: expL })
+    }
+
+    let accBalanceL = 0
+    for (let i = 5; i >= 0; i--) {
+      let m = monthNum - 1 - i
+      let y = year
+      if (m < 0) { m += 12; y-- }
+      const mTxs = await getMonthTotals(y, m, session.user.id)
+
+      accBalanceL += getGananciaNeta(mTxs, (t) =>
+        amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate),
+      )
+      balanceData.push({ label: MONTHS_SHORT[m], balance: accBalanceL })
+    }
   }
 
   const donutRowSpan = Math.max(16, Math.ceil(expenseCategories.length * 1.4) + 4)
@@ -746,9 +794,19 @@ export async function GET(req: NextRequest) {
   const [donutPng, barPng, evolutionPng, balancePng] = await Promise.all([
     svgToPng(generateDonutSVG(expenseCategories, "Gastos por Categoría")),
     svgToPng(
-      generateBarChartSVG(barData.length > 0 ? barData : [{ label: "Sin datos", value: 0, color: "#CBD5E1" }], "Ingresos vs Gastos del Mes"),
+      generateBarChartSVG(
+        barData.length > 0 ? barData : [{ label: "Sin datos", value: 0, color: "#CBD5E1" }],
+        isAll ? "Ingresos vs Gastos Totales" : "Ingresos vs Gastos del Mes",
+      ),
     ),
-    svgToPng(generateMonthlyEvolutionSVG(monthlyData, "Evolución Mensual", preferredCurrency)),
+    svgToPng(
+      generateMonthlyEvolutionSVG(
+        monthlyData,
+        isAll ? "Evolución por Mes" : "Evolución Mensual",
+        preferredCurrency,
+        isAll ? "Histórico de todos los meses" : "Últimos 6 meses",
+      ),
+    ),
     svgToPng(generateBalanceLineSVG(balanceData, "Balance Acumulado", preferredCurrency)),
   ])
 
@@ -784,7 +842,7 @@ export async function GET(req: NextRequest) {
   row++
 
   ws.mergeCells(`B${row}:D${row}`)
-  ws.getCell(`B${row}`).value = `Reporte Mensual — ${monthName}`
+  ws.getCell(`B${row}`).value = isAll ? "Reporte Histórico Acumulado" : `Reporte Mensual — ${monthName}`
   ws.getCell(`B${row}`).font = { size: 13, color: { argb: "FF64748B" }, name: "Calibri" }
   row++
 
@@ -861,7 +919,7 @@ export async function GET(req: NextRequest) {
 
   // ── Section: Evolución Mensual (grouped bar chart) ──
   ws.mergeCells(`B${row}:H${row}`)
-  ws.getCell(`B${row}`).value = "Evolución Mensual"
+  ws.getCell(`B${row}`).value = isAll ? "Evolución por Mes" : "Evolución Mensual"
   ws.getCell(`B${row}`).font = { bold: true, size: 14, color: { argb: "FF0F172A" }, name: "Calibri" }
   ws.getRow(row).height = 28
   row++
@@ -883,7 +941,7 @@ export async function GET(req: NextRequest) {
 
   // ── Section: Ingresos vs Gastos (bar chart with inline labels) ──
   ws.mergeCells(`B${row}:H${row}`)
-  ws.getCell(`B${row}`).value = "Ingresos vs Gastos del Mes"
+  ws.getCell(`B${row}`).value = isAll ? "Ingresos vs Gastos Totales" : "Ingresos vs Gastos del Mes"
   ws.getCell(`B${row}`).font = { bold: true, size: 14, color: { argb: "FF0F172A" }, name: "Calibri" }
   ws.getRow(row).height = 28
   row++
@@ -1027,13 +1085,13 @@ export async function GET(req: NextRequest) {
   const wsIncomes = wb.addWorksheet("Ingresos", {
     properties: { tabColor: { argb: "FF1E40AF" } },
   })
-  buildDetailSheet(wsIncomes, incomes, `Ingresos — ${monthName}`, BLUE_FILL, "FF1D4ED8")
+  buildDetailSheet(wsIncomes, incomes, isAll ? "Ingresos — Histórico Acumulado" : `Ingresos — ${monthName}`, BLUE_FILL, "FF1D4ED8")
 
   // ━━━ HOJA 3: GASTOS ━━━━━━━━━━━━━━━━━━━━━━━
   const wsExpenses = wb.addWorksheet("Gastos", {
     properties: { tabColor: { argb: "FFB91C1C" } },
   })
-  buildDetailSheet(wsExpenses, expenses, `Gastos — ${monthName}`, RED_FILL, "FFDC2626")
+  buildDetailSheet(wsExpenses, expenses, isAll ? "Gastos — Histórico Acumulado" : `Gastos — ${monthName}`, RED_FILL, "FFDC2626")
 
   // ─── WRITE & RESPOND ───────────────────────
   const buffer = await wb.xlsx.writeBuffer()
