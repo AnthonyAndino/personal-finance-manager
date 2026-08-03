@@ -225,7 +225,7 @@ export default async function Home({
                 </>
               )}
             </h1>
-            <p className="text-slate-500 text-sm md:text-base max-w-xl font-medium">
+            <p className="text-slate-500 text-sm md:text-base max-w-2xl font-medium">
               {period === "all"
                 ? "Visualiza la sumatoria acumulada de todos tus ingresos y gastos registrados."
                 : "Visualiza rápidamente el comportamiento de tus ingresos y gastos de este mes."}
