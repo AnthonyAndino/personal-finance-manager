@@ -8,17 +8,23 @@ export function DashboardCards({
   gastos,
   balance,
   currency = "L",
+  ingresosLabel = "Ingresos del Mes",
+  gastosLabel = "Gastos del Mes",
+  balanceLabel = "Ganancia Neta",
 }: {
   ingresos: number
   gastos: number
   balance: number
   currency?: string
+  ingresosLabel?: string
+  gastosLabel?: string
+  balanceLabel?: string
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div className="bg-white rounded-3xl border border-slate-200/60 shadow-[0_12px_30px_rgba(0,0,0,0.02)] p-6 flex items-start justify-between">
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ingresos del Mes</span>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{ingresosLabel}</span>
           <span className="text-3xl font-black text-slate-950">{currency}{formatMoney(ingresos)}</span>
         </div>
         <div className="p-3 bg-green-50 border border-green-200/30 rounded-2xl">
@@ -28,7 +34,7 @@ export function DashboardCards({
 
       <div className="bg-white rounded-3xl border border-slate-200/60 shadow-[0_12px_30px_rgba(0,0,0,0.02)] p-6 flex items-start justify-between">
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Gastos del Mes</span>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{gastosLabel}</span>
           <span className="text-3xl font-black text-slate-950">{currency}{formatMoney(gastos)}</span>
         </div>
         <div className="p-3 bg-red-50 border border-red-200/30 rounded-2xl">
@@ -42,7 +48,7 @@ export function DashboardCards({
           : "bg-red-50/20 border-red-200/60"
       }`}>
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ganancia Neta</span>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{balanceLabel}</span>
           <span className={`text-3xl font-black ${
             balance >= 0 ? "text-blue-600" : "text-red-600"
           }`}>

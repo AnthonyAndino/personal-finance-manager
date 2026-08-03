@@ -10,9 +10,16 @@ import { ExportButton } from "@/components/export-button"
 import { CurrencyToggle } from "@/components/currency-toggle"
 import { isOperationalExpense, isOperationalIncome } from "@/lib/transaction-categories"
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>
+}) {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
+
+  const resolvedParams = await searchParams
+  const period = resolvedParams.period === "all" ? "all" : "month"
 
   const userId = session.user.id
   const exchangeRate = await getDefaultRate()
@@ -33,26 +40,37 @@ export default async function Home() {
   const queryStart = new Date(Date.UTC(currentYear, currentMonth, 1))
   const queryEnd = new Date(Date.UTC(currentYear, currentMonth + 1, 1))
 
-  const raw = await prisma.transaction.findMany({
-    where: {
-      userId,
-      deletedAt: null,
-      date: {
-        gte: new Date(queryStart.getTime() - DAY_MS),
-        lt: new Date(queryEnd.getTime() + DAY_MS),
+  let raw: any[] = []
+  if (period === "all") {
+    raw = await prisma.transaction.findMany({
+      where: {
+        userId,
+        deletedAt: null,
       },
-    },
-    orderBy: { date: "asc" },
-  })
+      orderBy: { date: "asc" },
+    })
+  } else {
+    raw = await prisma.transaction.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        date: {
+          gte: new Date(queryStart.getTime() - DAY_MS),
+          lt: new Date(queryEnd.getTime() + DAY_MS),
+        },
+      },
+      orderBy: { date: "asc" },
+    })
+  }
 
-  const transaccionesMes = raw.filter((t) => {
+  const transaccionesFiltradas = period === "all" ? raw : raw.filter((t) => {
     const local = new Date(t.date.getTime() - HONDURAS_OFFSET_MS)
     return local.getUTCFullYear() === currentYear && local.getUTCMonth() === currentMonth
   })
 
   let ingresosL = 0
   let gastosL = 0
-  transaccionesMes.forEach((t) => {
+  transaccionesFiltradas.forEach((t) => {
     const enL = amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate)
     if (isOperationalIncome(t.type, t.category)) {
       ingresosL += enL
@@ -71,36 +89,76 @@ export default async function Home() {
     where: { userId, purchased: true },
   })
 
-  const semanasData = [
-    { nombre: "Semana 1", incomeL: 0, expenseL: 0 },
-    { nombre: "Semana 2", incomeL: 0, expenseL: 0 },
-    { nombre: "Semana 3", incomeL: 0, expenseL: 0 },
-    { nombre: "Semana 4", incomeL: 0, expenseL: 0 },
-  ]
+  let semanasDisplay: { nombre: string; income: number; expense: number }[] = []
+  let maxSemanaVal = 100
+  if (period === "month") {
+    const semanasData = [
+      { nombre: "Semana 1", incomeL: 0, expenseL: 0 },
+      { nombre: "Semana 2", incomeL: 0, expenseL: 0 },
+      { nombre: "Semana 3", incomeL: 0, expenseL: 0 },
+      { nombre: "Semana 4", incomeL: 0, expenseL: 0 },
+    ]
 
-  transaccionesMes.forEach((t) => {
-    const local = new Date(t.date.getTime() - HONDURAS_OFFSET_MS)
-    const dia = local.getUTCDate()
-    let indiceSemana = Math.floor((dia - 1) / 7)
-    if (indiceSemana > 3) indiceSemana = 3
-    const enL = amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate)
-    if (isOperationalIncome(t.type, t.category)) {
-      semanasData[indiceSemana].incomeL += enL
-    } else if (isOperationalExpense(t.type, t.category)) {
-      semanasData[indiceSemana].expenseL += enL
+    transaccionesFiltradas.forEach((t) => {
+      const local = new Date(t.date.getTime() - HONDURAS_OFFSET_MS)
+      const dia = local.getUTCDate()
+      let indiceSemana = Math.floor((dia - 1) / 7)
+      if (indiceSemana > 3) indiceSemana = 3
+      const enL = amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate)
+      if (isOperationalIncome(t.type, t.category)) {
+        semanasData[indiceSemana].incomeL += enL
+      } else if (isOperationalExpense(t.type, t.category)) {
+        semanasData[indiceSemana].expenseL += enL
+      }
+    })
+
+    semanasDisplay = semanasData.map((d) => ({
+      ...d,
+      income: totalFromLempiras(d.incomeL, currency, exchangeRate),
+      expense: totalFromLempiras(d.expenseL, currency, exchangeRate),
+    }))
+
+    maxSemanaVal = Math.max(...semanasDisplay.flatMap((d) => [d.income, d.expense]), 100)
+  }
+
+  const MONTHS_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+  const monthlyData: { label: string; income: number; expense: number }[] = []
+
+  if (period === "all") {
+    for (let i = 5; i >= 0; i--) {
+      let m = currentMonth - i
+      let y = currentYear
+      if (m < 0) {
+        m += 12
+        y--
+      }
+
+      const transaccionesMes = raw.filter((t) => {
+        const local = new Date(t.date.getTime() - HONDURAS_OFFSET_MS)
+        return local.getUTCFullYear() === y && local.getUTCMonth() === m
+      })
+
+      let incomeL = 0
+      let expenseL = 0
+      transaccionesMes.forEach((t) => {
+        const enL = amountToLempiras(t.amount.toNumber(), t.currency, exchangeRate)
+        if (isOperationalIncome(t.type, t.category)) {
+          incomeL += enL
+        } else if (isOperationalExpense(t.type, t.category)) {
+          expenseL += enL
+        }
+      })
+
+      monthlyData.push({
+        label: MONTHS_SHORT[m],
+        income: totalFromLempiras(incomeL, currency, exchangeRate),
+        expense: totalFromLempiras(expenseL, currency, exchangeRate),
+      })
     }
-  })
-
-  const semanasDisplay = semanasData.map((d) => ({
-    ...d,
-    income: totalFromLempiras(d.incomeL, currency, exchangeRate),
-    expense: totalFromLempiras(d.expenseL, currency, exchangeRate),
-  }))
-
-  const maxSemanaVal = Math.max(...semanasDisplay.flatMap((d) => [d.income, d.expense]), 100)
+  }
 
   const gastosPorCategoriaL: Record<string, number> = {}
-  transaccionesMes
+  transaccionesFiltradas
     .filter((t) => isOperationalExpense(t.type, t.category))
     .forEach((t) => {
       const cat = t.category.trim().toLowerCase()
@@ -144,20 +202,59 @@ export default async function Home() {
 
       {/* Contenido Principal */}
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 md:px-8 py-8 flex flex-col gap-10">
-        {/* Título de Bienvenida */}
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-black text-[#2563EB] uppercase tracking-widest bg-blue-50 border border-blue-200/50 rounded-full px-3 py-1 w-fit">
-            Resumen del mes
-          </span>
-          <h1 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight leading-none capitalize">
-            {nombreMes}.{" "}
-            <span className="bg-gradient-to-r from-[#2563EB] to-blue-500 bg-clip-text text-transparent">
-              Balance actual.
+        {/* Título de Bienvenida y Selector de Período */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-black text-[#2563EB] uppercase tracking-widest bg-blue-50 border border-blue-200/50 rounded-full px-3 py-1 w-fit">
+              {period === "all" ? "Resumen General" : "Resumen del mes"}
             </span>
-          </h1>
-          <p className="text-slate-500 text-sm md:text-base max-w-xl font-medium">
-            Visualiza rápidamente el comportamiento de tus ingresos y gastos de este mes.
-          </p>
+            <h1 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight leading-none capitalize">
+              {period === "all" ? (
+                <>
+                  Historial.{" "}
+                  <span className="bg-gradient-to-r from-[#2563EB] to-blue-500 bg-clip-text text-transparent">
+                    Balance global.
+                  </span>
+                </>
+              ) : (
+                <>
+                  {nombreMes}.{" "}
+                  <span className="bg-gradient-to-r from-[#2563EB] to-blue-500 bg-clip-text text-transparent">
+                    Balance actual.
+                  </span>
+                </>
+              )}
+            </h1>
+            <p className="text-slate-500 text-sm md:text-base max-w-xl font-medium">
+              {period === "all"
+                ? "Visualiza la sumatoria acumulada de todos tus ingresos y gastos registrados."
+                : "Visualiza rápidamente el comportamiento de tus ingresos y gastos de este mes."}
+            </p>
+          </div>
+
+          {/* Selector de Período */}
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit border border-slate-200/60 shadow-sm shrink-0">
+            <a
+              href="/?period=month"
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+                period === "month"
+                  ? "bg-white text-slate-900 shadow-[0_4px_12px_rgba(0,0,0,0.05)] border border-slate-200/20"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Este Mes
+            </a>
+            <a
+              href="/?period=all"
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+                period === "all"
+                  ? "bg-white text-slate-900 shadow-[0_4px_12px_rgba(0,0,0,0.05)] border border-slate-200/20"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Histórico Acumulado
+            </a>
+          </div>
         </div>
 
         {/* Bloque Financiero Estilo Imagen - bg-slate-950 */}
@@ -165,7 +262,9 @@ export default async function Home() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-0">
             {/* Métrica 1: Ingreso total */}
             <div className="flex flex-col gap-1 p-4 md:p-6 border-r border-slate-800">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ingreso Mensual</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                {period === "all" ? "Ingreso Total" : "Ingreso Mensual"}
+              </span>
               <span className="text-3xl md:text-4xl font-black text-white">
                 <span className="text-[#2563EB]">{currency}</span>{formatMoney(ingresos)}
               </span>
@@ -173,7 +272,9 @@ export default async function Home() {
 
             {/* Métrica 2: Gasto total */}
             <div className="flex flex-col gap-1 p-4 md:p-6 border-r border-slate-800">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Gasto Mensual</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                {period === "all" ? "Gasto Total" : "Gasto Mensual"}
+              </span>
               <span className="text-3xl md:text-4xl font-black text-white">
                 {currency}{formatMoney(gastos)}
               </span>
@@ -181,7 +282,9 @@ export default async function Home() {
 
             {/* Métrica 3: Retorno financiero */}
             <div className="flex flex-col gap-1 p-4 md:p-6 border-r border-slate-800">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Retorno Financiero</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                {period === "all" ? "Retorno Histórico" : "Retorno Financiero"}
+              </span>
               <span className="text-3xl md:text-4xl font-black text-white">
                 {retorno.toFixed(1)}<span className="text-[#2563EB]">x</span>
               </span>
@@ -198,66 +301,141 @@ export default async function Home() {
         </div>
 
         {/* Rejilla de Totales Rápidos */}
-        <DashboardCards ingresos={ingresos} gastos={gastos} balance={balance} currency={currency} />
+        <DashboardCards
+          ingresos={ingresos}
+          gastos={gastos}
+          balance={balance}
+          currency={currency}
+          ingresosLabel={period === "all" ? "Ingresos Totales" : "Ingresos del Mes"}
+          gastosLabel={period === "all" ? "Gastos Totales" : "Gastos del Mes"}
+          balanceLabel={period === "all" ? "Balance General" : "Ganancia Neta"}
+        />
 
         {/* Sección de Gráficos SVG */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Gráfico Semanal */}
+          {/* Gráfico Semanal / Mensual */}
           <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/60 shadow-[0_15px_40px_rgba(0,0,0,0.03)] p-6 md:p-8 flex flex-col gap-6">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <h3 className="font-extrabold text-slate-900 text-lg">Historial Semanal</h3>
-                <span className="text-xs text-slate-400 font-medium">Comparativa de ingresos y gastos</span>
-              </div>
-              <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-wider">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded bg-green-500 inline-block"></span>
-                  <span className="text-slate-500">Ingresos</span>
+            {period === "month" ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <h3 className="font-extrabold text-slate-900 text-lg">Historial Semanal</h3>
+                    <span className="text-xs text-slate-400 font-medium">Comparativa de ingresos y gastos</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-wider">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded bg-green-500 inline-block"></span>
+                      <span className="text-slate-500">Ingresos</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded bg-red-500 inline-block"></span>
+                      <span className="text-slate-500">Gastos</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded bg-red-500 inline-block"></span>
-                  <span className="text-slate-500">Gastos</span>
+
+                <div className="relative w-full overflow-hidden">
+                  <svg className="w-full h-auto min-h-[220px]" viewBox="0 0 500 220" fill="none">
+                    <line x1="40" y1="30" x2="480" y2="30" stroke="#f1f5f9" strokeWidth="1" />
+                    <line x1="40" y1="80" x2="480" y2="80" stroke="#f1f5f9" strokeWidth="1" />
+                    <line x1="40" y1="130" x2="480" y2="130" stroke="#f1f5f9" strokeWidth="1" />
+                    <line x1="40" y1="180" x2="480" y2="180" stroke="#f8fafc" strokeWidth="2" />
+
+                    {semanasDisplay.map((d, i) => {
+                      const xBase = 60 + i * 110;
+                      const hIncome = d.income > 0 ? (d.income / maxSemanaVal) * 130 : 2;
+                      const hExpense = d.expense > 0 ? (d.expense / maxSemanaVal) * 130 : 2;
+                      const yIncome = 180 - hIncome;
+                      const yExpense = 180 - hExpense;
+
+                      return (
+                        <g key={i} className="group">
+                          <rect x={xBase} y={yIncome} width="32" height={hIncome} rx="6" fill="#10b981" className="transition-all duration-300 hover:fill-green-600 cursor-pointer" />
+                          <rect x={xBase + 38} y={yExpense} width="32" height={hExpense} rx="6" fill="#ef4444" className="transition-all duration-300 hover:fill-red-600 cursor-pointer" />
+                          {d.income > 0 && (
+                            <text x={xBase + 16} y={yIncome - 6} textAnchor="middle" fill="#0f172a" className="text-[10px] font-black">{currency}{Math.round(d.income)}</text>
+                          )}
+                          {d.expense > 0 && (
+                            <text x={xBase + 54} y={yExpense - 6} textAnchor="middle" fill="#ef4444" className="text-[10px] font-black">{currency}{Math.round(d.expense)}</text>
+                          )}
+                          <text x={xBase + 35} y="202" textAnchor="middle" fill="#64748b" className="text-xs font-bold">{d.nombre}</text>
+                        </g>
+                      );
+                    })}
+                  </svg>
                 </div>
-              </div>
-            </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <h3 className="font-extrabold text-slate-900 text-lg">Evolución Mensual</h3>
+                    <span className="text-xs text-slate-400 font-medium">Últimos 6 meses — ingresos vs gastos</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-wider">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded bg-green-500 inline-block"></span>
+                      <span className="text-slate-500">Ingresos</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded bg-red-500 inline-block"></span>
+                      <span className="text-slate-500">Gastos</span>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="relative w-full overflow-hidden">
-              <svg className="w-full h-auto min-h-[220px]" viewBox="0 0 500 220" fill="none">
-                <line x1="40" y1="30" x2="480" y2="30" stroke="#f1f5f9" strokeWidth="1" />
-                <line x1="40" y1="80" x2="480" y2="80" stroke="#f1f5f9" strokeWidth="1" />
-                <line x1="40" y1="130" x2="480" y2="130" stroke="#f1f5f9" strokeWidth="1" />
-                <line x1="40" y1="180" x2="480" y2="180" stroke="#f8fafc" strokeWidth="2" />
+                {monthlyData.some((d) => d.income > 0 || d.expense > 0) ? (
+                  <div className="relative w-full overflow-hidden">
+                    <svg className="w-full h-auto min-h-[220px]" viewBox="0 0 500 220" fill="none">
+                      <line x1="40" y1="30" x2="480" y2="30" stroke="#f1f5f9" strokeWidth="1" />
+                      <line x1="40" y1="80" x2="480" y2="80" stroke="#f1f5f9" strokeWidth="1" />
+                      <line x1="40" y1="130" x2="480" y2="130" stroke="#f1f5f9" strokeWidth="1" />
+                      <line x1="40" y1="180" x2="480" y2="180" stroke="#f8fafc" strokeWidth="2" />
 
-                {semanasDisplay.map((d, i) => {
-                  const xBase = 60 + i * 110;
-                  const hIncome = d.income > 0 ? (d.income / maxSemanaVal) * 130 : 2;
-                  const hExpense = d.expense > 0 ? (d.expense / maxSemanaVal) * 130 : 2;
-                  const yIncome = 180 - hIncome;
-                  const yExpense = 180 - hExpense;
+                      {(() => {
+                        const maxVal = Math.max(...monthlyData.flatMap((d) => [d.income, d.expense]), 100)
+                        return monthlyData.map((d, i) => {
+                          const xBase = 50 + i * 75
+                          const barW = 24
+                          const gap = 6
+                          const hIncome = d.income > 0 ? (d.income / maxVal) * 130 : 2
+                          const hExpense = d.expense > 0 ? (d.expense / maxVal) * 130 : 2
+                          const yIncome = 180 - hIncome
+                          const yExpense = 180 - hExpense
 
-                  return (
-                    <g key={i} className="group">
-                      <rect x={xBase} y={yIncome} width="32" height={hIncome} rx="6" fill="#10b981" className="transition-all duration-300 hover:fill-green-600 cursor-pointer" />
-                      <rect x={xBase + 38} y={yExpense} width="32" height={hExpense} rx="6" fill="#ef4444" className="transition-all duration-300 hover:fill-red-600 cursor-pointer" />
-                      {d.income > 0 && (
-                        <text x={xBase + 16} y={yIncome - 6} textAnchor="middle" fill="#0f172a" className="text-[10px] font-black">{currency}{Math.round(d.income)}</text>
-                      )}
-                      {d.expense > 0 && (
-                        <text x={xBase + 54} y={yExpense - 6} textAnchor="middle" fill="#ef4444" className="text-[10px] font-black">{currency}{Math.round(d.expense)}</text>
-                      )}
-                      <text x={xBase + 35} y="202" textAnchor="middle" fill="#64748b" className="text-xs font-bold">{d.nombre}</text>
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
+                          return (
+                            <g key={i} className="group">
+                              <rect x={xBase} y={yIncome} width={barW} height={hIncome} rx="4" fill="#10b981" className="transition-all duration-300 hover:fill-green-600 cursor-pointer" />
+                              <rect x={xBase + barW + gap} y={yExpense} width={barW} height={hExpense} rx="4" fill="#ef4444" className="transition-all duration-300 hover:fill-red-600 cursor-pointer" />
+                              {d.income > 0 && (
+                                <text x={xBase + barW / 2} y={yIncome - 6} textAnchor="middle" fill="#0f172a" className="text-[9px] font-black">{currency}{Math.round(d.income)}</text>
+                              )}
+                              {d.expense > 0 && (
+                                <text x={xBase + barW + gap + barW / 2} y={yExpense - 6} textAnchor="middle" fill="#ef4444" className="text-[9px] font-black">{currency}{Math.round(d.expense)}</text>
+                              )}
+                              <text x={xBase + barW / 2 + gap / 2} y="202" textAnchor="middle" fill="#64748b" className="text-xs font-bold">{d.label}</text>
+                            </g>
+                          )
+                        })
+                      })()}
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center py-12">
+                    <p className="text-slate-400 text-sm font-medium">Sin ingresos ni gastos en los últimos 6 meses</p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Top Gastos por Categoría */}
           <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200/60 shadow-[0_15px_40px_rgba(0,0,0,0.03)] p-6 md:p-8 flex flex-col gap-6">
             <div className="flex flex-col">
               <h3 className="font-extrabold text-slate-900 text-lg">Distribución de Gastos</h3>
-              <span className="text-xs text-slate-400 font-medium">Categorías en las que más has gastado</span>
+              <span className="text-xs text-slate-400 font-medium">
+                {period === "all" ? "Categorías con mayores gastos acumulados" : "Categorías en las que más has gastado"}
+              </span>
             </div>
 
             {categoriasGastos.length === 0 ? (

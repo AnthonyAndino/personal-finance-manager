@@ -122,6 +122,7 @@ docker compose up -d # levantar PostgreSQL local
 
 ## Deploy
 
+- URL de Producción: https://finance-manager-anthony.vercel.app/
 - Vercel + Supabase
 - Env vars en Vercel: `DATABASE_URL`, `AUTH_SECRET`
 - Migraciones: `npx prisma migrate deploy` local apuntando a Supabase
